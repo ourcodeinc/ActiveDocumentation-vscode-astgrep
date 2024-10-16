@@ -1,9 +1,8 @@
 # Change Log
 
-All notable changes to the "first-extension" extension will be documented in this file.
-
-Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
+In this version, the tool uses [ast-grep](https://ast-grep.github.io/) to parse the code.
+The other major change is that the rule checking is done in the extension.
 
 ## [Unreleased]
 
-- Initial release
+- Version 0.1.0

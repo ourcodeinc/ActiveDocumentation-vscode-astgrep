@@ -1,15 +1,33 @@
-import * as assert from 'assert';
+import assert from "assert";
+import { spy } from "sinon";
 
-// You can import and use all API from the 'vscode' module
-// as well as import your extension to test it
-import * as vscode from 'vscode';
-// import * as myExtension from '../../extension';
+// Mocking vscode
+const vscode = {
+  window: {
+    showInformationMessage: spy(),
+  },
+};
 
-suite('Extension Test Suite', () => {
-	vscode.window.showInformationMessage('Start all tests.');
+// Mocking the import for vscode
+import proxyquire from "proxyquire";
 
-	test('Sample test', () => {
-		assert.strictEqual(-1, [1, 2, 3].indexOf(5));
-		assert.strictEqual(-1, [1, 2, 3].indexOf(0));
-	});
+// Importing the extension with mocked vscode
+const { activate, deactivate } = proxyquire.noCallThru()("../extension", {
+  vscode: vscode,
+});
+
+describe("Extension Tests", () => {
+  afterEach(() => {
+    vscode.window.showInformationMessage.resetHistory();
+  });
+
+  it("should show information message when activated", () => {
+    activate();
+    assert.ok(vscode.window.showInformationMessage.calledWith(
+      "Extension ActiveDocumentation is now active."), "Information message mismatch");
+  });
+
+  it("should have a deactivate function", () => {
+    assert.strictEqual(typeof deactivate, "function", "Deactivate should be a function");
+  });
 });

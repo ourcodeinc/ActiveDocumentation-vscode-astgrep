@@ -1,5 +1,11 @@
-out
-dist
-node_modules
+# dependencies
+/node_modules
+package-lock.json
+
+# production
+/out
 .vscode-test/
+
+# misc
+**/.DS_Store
 *.vsix

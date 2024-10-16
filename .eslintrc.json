@@ -2,29 +2,70 @@
     "root": true,
     "parser": "@typescript-eslint/parser",
     "parserOptions": {
-        "ecmaVersion": 6,
-        "sourceType": "module"
+        "ecmaVersion": 2020,
+        "sourceType": "module",
+        "project": "./tsconfig.json"
     },
     "plugins": [
-        "@typescript-eslint"
+        "@typescript-eslint",
+        "import"
     ],
     "rules": {
         "@typescript-eslint/naming-convention": [
             "warn",
             {
-                "selector": "import",
-                "format": [ "camelCase", "PascalCase" ]
+                "selector": "default",
+                "format": ["camelCase"],
+                "leadingUnderscore": "allow"
+            },
+            {
+                "selector": "variable",
+                "format": ["camelCase", "UPPER_CASE"],
+                "leadingUnderscore": "allow"
+            },
+            {
+                "selector": "typeLike",
+                "format": ["PascalCase"]
             }
         ],
-        "@typescript-eslint/semi": "warn",
+        "@typescript-eslint/semi": ["warn", "always"],
         "curly": "warn",
-        "eqeqeq": "warn",
+        "eqeqeq": ["warn", "always"],
         "no-throw-literal": "warn",
-        "semi": "off"
+        "semi": "off",
+        "camelcase": "off",
+        "guard-for-in": "warn",
+        "import/default": "off",
+        "import/export": "off",
+        "import/namespace": "off",
+        "indent": ["error", 2, { "SwitchCase": 1 }],
+        "linebreak-style": "off",
+        "max-len": "off",
+        "new-cap": "off",
+        "no-case-declarations": "off",
+        "no-constant-condition": "off",
+        "no-control-regex": "off",
+        "no-invalid-this": "off",
+        "no-prototype-builtins": "off",
+        "object-curly-spacing": ["error", "always"],
+        "prefer-promise-reject-errors": "off",
+        "quotes": ["error", "double"],
+        "require-jsdoc": "off",
+        "valid-jsdoc": "off"
     },
     "ignorePatterns": [
         "out",
         "dist",
-        "**/*.d.ts"
+        "**/*.d.ts",
+        "**/*.js"
+    ],
+    "extends": [
+        "eslint:recommended",
+        "plugin:@typescript-eslint/recommended",
+        "google",
+        "plugin:import/errors",
+        "plugin:import/warnings",
+        "plugin:import/typescript"
     ]
-}
+  }
+  

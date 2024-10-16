@@ -1,8 +1,8 @@
 {
   "name": "activedoc",
-  "displayName": "ActiveDoc",
-  "description": "testing",
-  "version": "0.0.3",
+  "displayName": "ActiveDocumentation",
+  "description": "Active Documentation extension.",
+  "version": "0.1.0",
   "engines": {
     "vscode": "^1.86.0"
   },
@@ -13,48 +13,43 @@
     "onStartupFinished"
   ],
   "main": "./out/extension.js",
-  "contributes": {
-    "commands": [
-      {
-        "command": "activedoc.helloWorld",
-        "title": "Hello World"
-      },
-      {
-        "command": "activedoc.mineRules",
-        "title": "Mine Rules"
-      }
-    ],
-    "menus": {
-      "editor/context": [
-        {
-          "when": "editorTextFocus",
-          "command": "activedoc.mineRules",
-          "group": "navigation"
-        }
-      ]
-    }
-  },
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
-    "pretest": "npm run compile && npm run lint",
+    "watch": "tsc --watch -p ./",
     "lint": "eslint src --ext ts",
-    "test": "vscode-test"
+    "compile-tests": "tsc -p . --outDir out",
+    "pretest": "npm run compile-tests && npm run compile && npm run lint",
+    "test": "node ./out/test/runTest.js",
+    "test:file": "mocha out/test/**/*.test.js --reporter spec"
   },
   "devDependencies": {
-    "@types/mocha": "^10.0.6",
+    "@types/glob": "8.1.0",
+    "@types/mocha": "10.0.9",
     "@types/node": "18.x",
-    "@types/vscode": "^1.86.0",
-    "@types/ws": "^8.5.10",
-    "@typescript-eslint/eslint-plugin": "^6.19.1",
-    "@typescript-eslint/parser": "^6.19.1",
-    "@vscode/test-cli": "^0.0.4",
-    "@vscode/test-electron": "^2.3.9",
-    "eslint": "^8.56.0",
-    "typescript": "^5.3.3"
+    "@types/proxyquire": "1.3.31",
+    "@types/sinon": "17.0.3",
+    "@types/vscode": "1.94.0",
+    "@types/ws": "8.5.10",
+    "@typescript-eslint/eslint-plugin": "6.19.1",
+    "@typescript-eslint/parser": "6.19.1",
+    "@vscode/test-cli": "0.0.4",
+    "@vscode/test-electron": "2.3.9",
+    "eslint": "8.57.1",
+    "eslint-config-google": "0.14.0",
+    "eslint-plugin-import": "2.29.1",
+    "eslint-plugin-jsx-a11y": "6.9.0",
+    "eslint-plugin-react": "7.34.3",
+    "eslint-plugin-react-hooks": "4.6.2",
+    "mocha": "10.7.3",
+    "proxyquire": "^2.1.3",
+    "sinon": "19.0.2",
+    "ts-node": "10.9.2",
+    "typescript": "5.3.3",
+    "vscode-test": "1.6.1"
   },
   "dependencies": {
-    "ws": "^8.16.0"
+    "ws": "8.16.0",
+    "@ast-grep/napi": "0.28.0"
   }
 }
