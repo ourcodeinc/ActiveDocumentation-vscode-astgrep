@@ -1,35 +1,33 @@
 // eslint-disable-next-line import/no-unresolved
 import * as vscode from "vscode";
 import config from "./config";
-
-import { webSocketManger } from "./websocket/webSocketManager";
-import { RuleManager } from "./ruleManager";
-import { FileChangeManager } from "./fileChangeManager";
+import { WebSocketManager } from "./websocket/webSocketManager";
+import { RuleManager } from "./core/ruleProcessor/ruleManager";
+import { FileManager } from "./fileManager";
 
 
 export async function activate(context: vscode.ExtensionContext) {
-  console.log("Extension ActiveDocumentation is now active.");
-  vscode.window.showInformationMessage("Extension ActiveDocumentation is now active.");
+    console.log("Extension ActiveDocumentation is now active.");
+    vscode.window.showInformationMessage("Extension ActiveDocumentation is now active.");
 
-  let workspaceFolder: vscode.WorkspaceFolder;
+    let workspaceFolder: vscode.WorkspaceFolder;
 
-  if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
-    workspaceFolder = vscode.workspace.workspaceFolders[0];
-  } else {
-    console.log("No workspace folders are open.");
-    return;
-  }
+    // Check for workspace
+    if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
+        workspaceFolder = vscode.workspace.workspaceFolders[0];
+    } else {
+        console.log("No workspace folders are open.");
+        return;
+    }
 
-  const ruleManager = RuleManager.getInstance(workspaceFolder);
-  ruleManager.getRules().then((rules) => {
-    console.log(rules);
-  });
+    // Opening the server
+    const server = new WebSocketManager(config.websocketPort);
 
-  FileChangeManager.getInstance(workspaceFolder);
+    // Instantiating the managers
+    RuleManager.getInstance(workspaceFolder, server);
+    FileManager.getInstance(workspaceFolder, server);
 
-  const server = webSocketManger(config.websocketPort);
-
-  context.subscriptions.push(new vscode.Disposable(() => server.close()));
+    context.subscriptions.push(new vscode.Disposable(() => server.close()));
 }
 
 export function deactivate() { }

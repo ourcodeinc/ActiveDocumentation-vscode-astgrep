@@ -1,5 +1,5 @@
 const config = {
-  websocketPort: 8889,
+    websocketPort: 8889,
 };
 
 export default config;

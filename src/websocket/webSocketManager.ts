@@ -1,40 +1,105 @@
-import * as ws from "ws";
+// eslint-disable-next-line @typescript-eslint/naming-convention
+import * as WebSocket from "ws";
 
-import { WebSocketConstants } from "./WebSocketConstants";
+export class WebSocketManager {
+    public server: WebSocket.Server;
+    public clients: Set<WebSocket>;
+    public messageQueue: { [key: string]: string | null };
 
-/**
- * Opens a WebSocket server on a given port
- * @param port typically retrieved from config.ts
- * @returns the server
- * @ignore Testing common API calls is not necessary.
- */
-export const webSocketManger = (port: number): ws.Server => {
-  const server = new ws.Server({ port });
-  console.log(`WebSocket server started on port: ${port}`);
+    constructor(port: number) {
+        this.clients = new Set<WebSocket>();
+        this.messageQueue = {};
+        this.server = new WebSocket.Server({ port });
 
-  server.on("connection", (ws) => {
-    console.log("Client connected");
+        console.log("WebSocket.ts:", `WebSocket server started on port: ${port}`);
+        this.server.on("connection", (ws: WebSocket) => this.onConnection(ws));
+    }
 
+    /**
+   * Handle new client connections
+   * @param ws
+   */
+    private onConnection(ws: WebSocket): void {
+        console.log("Client connected");
+        this.clients.add(ws);
+        this.sendQueuedMessagesToClient(ws);
 
-    (async () => {
-      ws.send(JSON.stringify({
-        command: WebSocketConstants.SEND_ENTER_CHAT_MSG,
-        data: "IDE is connected to ActiveDocumentation",
-      }));
-    })().catch((error) => console.error("Error in WebSocket connection handler:", error));
+        ws.on("message", (message: string) => {
+            console.log("WebSocket.ts:", `Received message: ${message}`);
+        });
 
-    ws.on("message", (message: string) => {
-      console.log(`Received message: ${message}`);
-    });
+        ws.on("error", (error) => {
+            console.error("WebSocket.ts:", `WebSocket error: ${error}`);
+        });
 
-    ws.on("error", (error) => {
-      console.error(`WebSocket error: ${error}`);
-    });
+        ws.on("close", () => {
+            console.log("WebSocket.ts:", "Client disconnected");
+            this.clients.delete(ws);
+        });
+    }
 
-    ws.on("close", () => {
-      console.log("Client disconnected");
-    });
-  });
+    public sendQueuedMessagesToClient(ws: WebSocket): void {
+        if (ws.readyState === WebSocket.OPEN) {
+            Object.keys(this.messageQueue).forEach((key: string) => {
+                const message = this.messageQueue[key];
+                if (message !== null) {
+                    ws.send(message);
+                }
+            });
+        }
+    }
 
-  return server;
-};
+    private sendMessagesToAllClients(): void {
+        this.clients.forEach((client) => {
+            this.sendQueuedMessagesToClient(client);
+        });
+    }
+
+    private sendMessageToClient(ws: WebSocket, message: string): void {
+        if (ws.readyState === WebSocket.OPEN) {
+            ws.send(message);
+        }
+    }
+
+    /**
+     * Send a message to all clients
+     * @param message
+     */
+    public broadcast(message: string): void {
+        this.clients.forEach((client) => {
+            this.sendMessageToClient(client, message);
+        });
+    }
+
+    /**
+   * add a message to the queue and send it if clients are connected
+   * @param {string} message
+   */
+    public queueMessage(key: string, message: string): void {
+        this.messageQueue[key] = message;
+        this.sendMessagesToAllClients();
+    }
+
+    /**
+   * Method to close the WebSocket server and all client connections
+   */
+    public close(): void {
+        console.log("WebSocket.ts:", "Closing WebSocket server...");
+
+        // Close all connected clients
+        this.clients.forEach((client) => {
+            if (client.readyState === WebSocket.OPEN) {
+                client.close();
+            }
+        });
+
+        // Close the WebSocket server
+        this.server.close((err) => {
+            if (err) {
+                console.error("WebSocket.ts:", "Error closing the WebSocket server:", err);
+            } else {
+                console.log("WebSocket.ts:", "WebSocket server closed successfully.");
+            }
+        });
+    }
+}

@@ -7,14 +7,14 @@ import { parse, Lang, SgNode, NapiConfig } from "@ast-grep/napi";
  * @param lang {Lang} The language of the sourcecode.
  */
 export const executeRuleOnSource = (rule: NapiConfig, source: string, lang: Lang) : SgNode[] => {
-  try {
-    const ast = parse(lang, source);
-    const root = ast.root();
-    return executeRuleOnAstRoot(rule, root);
-  } catch (e) {
-    console.log("Error happened in executing the rule.", e);
-    return [];
-  }
+    try {
+        const ast = parse(lang, source);
+        const root = ast.root();
+        return executeRuleOnAstRoot(rule, root);
+    } catch (e) {
+        console.log("Error happened in executing the rule.", e);
+        return [];
+    }
 };
 
 /**
@@ -25,11 +25,11 @@ export const executeRuleOnSource = (rule: NapiConfig, source: string, lang: Lang
  * (findAll() method is not identified in tests.)
  */
 export const executeRuleOnAstRoot = (rule: NapiConfig, root: SgNode) : SgNode[] => {
-  try {
-    const nodes = root.findAll(rule);
-    return nodes;
-  } catch (e) {
-    console.log("Error happened in finding the matches of the rule in the AST of the sourcecode.", e);
-    return [];
-  }
+    try {
+        const nodes = root.findAll(rule);
+        return nodes;
+    } catch (e) {
+        console.log("Error happened in finding the matches of the rule in the AST of the sourcecode.", e);
+        return [];
+    }
 };

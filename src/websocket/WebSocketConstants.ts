@@ -1,8 +1,13 @@
 /* eslint-disable @typescript-eslint/naming-convention */
-export const WebSocketConstants = {
-  MESSAGE_KEY_COMMAND: "command",
-  MESSAGE_KEY_DATA: "data",
+export const WEBSOCKET_SENT_MESSAGE = {
+    WEBSOCKET_CONNECTED_MSG: "CONNECTED",
+    WEBSOCKET_DISCONNECTED_MSG: "DISCONNECTED",
 
-  SEND_ENTER_CHAT_MSG: "ENTER",
-  SEND_LEFT_CHAT_MSG: "LEFT",
+    RULE_TABLE_MSG: "RULE_TABLE",
 };
+
+
+export interface websocketMessageStructure {
+  command: "string",
+  data: "object",
+}
