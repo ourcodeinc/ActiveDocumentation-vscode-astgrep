@@ -48,11 +48,10 @@ export class FileManager {
    * @param document - The event containing information about the text document change.
    */
     public handleSaveTextDocument(document: vscode.TextDocument) {
-        console.log(`Document saved: ${document.uri.toString()}`);
         const fileUri = vscode.Uri.joinPath(this.workspaceFolder.uri, constants.RULE_TABLE_FILE);
         if (document.uri.toString() === fileUri.toString()) {
             const ruleManager = RuleManager.getInstance(this.workspaceFolder, this.webSocketManager);
-            ruleManager.handleFileChange();
+            ruleManager.updateRuleTable();
         }
     }
 }

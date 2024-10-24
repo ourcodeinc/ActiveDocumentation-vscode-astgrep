@@ -41,27 +41,29 @@ describe("ruleExecutor", () => {
         },
     };
 
-    it("should execute the rule on source code and return nodes", () => {
-        const result: SgNode[] = executeRuleOnSource(mockRule, mockSourceCode, mockLang);
-        assert.ok(Array.isArray(result));
-        assert.ok(result.length === 2);
-    });
+    describe("executeRuleOnSource", () => {
+        it("should execute the rule on source code and return nodes", () => {
+            const result: SgNode[] = executeRuleOnSource(mockRule, mockSourceCode, mockLang);
+            assert.ok(Array.isArray(result));
+            assert.ok(result.length === 2);
+        });
 
-    it("should return an empty array when given invalid source code", () => {
-        const invalidSource: string = "invalid syntax here";
-        const result: SgNode[] = executeRuleOnSource(mockRule, invalidSource, mockLang);
-        assert.ok(Array.isArray(result));
-        assert.strictEqual(result.length, 0);
-    });
+        it("should return an empty array when given invalid source code", () => {
+            const invalidSource: string = "invalid syntax here";
+            const result: SgNode[] = executeRuleOnSource(mockRule, invalidSource, mockLang);
+            assert.ok(Array.isArray(result));
+            assert.strictEqual(result.length, 0);
+        });
 
-    it("should return an empty array when the rule doesn't match any node", () => {
-        const nonMatchingRule: NapiConfig = {
-            rule: {
-                pattern: "non.existent.pattern()",
-            },
-        };
-        const result: SgNode[] = executeRuleOnSource(nonMatchingRule, mockSourceCode, mockLang);
-        assert.ok(Array.isArray(result));
-        assert.strictEqual(result.length, 0);
+        it("should return an empty array when the rule doesn't match any node", () => {
+            const nonMatchingRule: NapiConfig = {
+                rule: {
+                    pattern: "non.existent.pattern()",
+                },
+            };
+            const result: SgNode[] = executeRuleOnSource(nonMatchingRule, mockSourceCode, mockLang);
+            assert.ok(Array.isArray(result));
+            assert.strictEqual(result.length, 0);
+        });
     });
 });

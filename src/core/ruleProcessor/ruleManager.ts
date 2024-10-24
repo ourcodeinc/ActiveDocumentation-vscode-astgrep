@@ -1,18 +1,20 @@
 // eslint-disable-next-line import/no-unresolved
 import * as vscode from "vscode";
 import { constants } from "../../constants";
-import { Rule } from "../types";
+import { ResultObject, Rule } from "../types";
 import { WebSocketManager } from "../../websocket/webSocketManager";
 import { WEBSOCKET_SENT_MESSAGE } from "../../websocket/webSocketConstants";
-import { createWebSocketMessage } from "../utilities";
+import { createWebSocketMessage, getSourceFromRelativePath } from "../utilities";
+import { executeRuleOnSource, getSnippetFromSgNode } from "../astGrep/ruleExecutor";
+import { Lang, SgNode } from "@ast-grep/napi";
 
 /**
  * Singleton class to manage rules from ruleTable.json.
  */
 class RuleManager {
     private static instance: RuleManager | null = null;
-    private rules: Rule[] = [];
-    private workspaceFolder: vscode.WorkspaceFolder;
+    public rules: Rule[] = [];
+    public workspaceFolder: vscode.WorkspaceFolder;
     private webSocketManager: WebSocketManager;
 
     /**
@@ -22,10 +24,7 @@ class RuleManager {
     private constructor(workspaceFolder: vscode.WorkspaceFolder, webSocketManager: WebSocketManager) {
         this.workspaceFolder = workspaceFolder;
         this.webSocketManager = webSocketManager;
-        this.readRuleTable().then((rules) => {
-            this.rules = rules;
-            this.sendRules();
-        });
+        this.updateRuleTable();
     }
 
     /**
@@ -47,9 +46,7 @@ class RuleManager {
    */
     public async readRuleTable(): Promise<Rule[]> {
         try {
-            const fileUri = vscode.Uri.joinPath(this.workspaceFolder.uri, constants.RULE_TABLE_FILE);
-            const fileData = await vscode.workspace.fs.readFile(fileUri);
-            const fileContent = Buffer.from(fileData).toString("utf8");
+            const fileContent = await getSourceFromRelativePath(this.workspaceFolder, constants.RULE_TABLE_FILE);
             return JSON.parse(fileContent); // todo: do checking here...
         } catch (error) {
             vscode.window.showErrorMessage(`Error reading ${constants.RULE_TABLE_FILE}: ${error}`);
@@ -58,18 +55,58 @@ class RuleManager {
     }
 
     /**
-   * Handle file changes by re-reading the rule table and returning changed rules.
-   */
-    public handleFileChange(): void {
-        this.readRuleTable().then((rules) => {
-            this.rules = rules;
-            this.sendRules();
-        });
+     * Reads and updates the rules and sends the new rules to WebSocket
+     */
+    public async updateRuleTable(): Promise<void> {
+        const rules = await this.readRuleTable();
+        const executedRules = await this.executeRules(rules);
+        this.rules = executedRules;
+        this.sendRulesToWebSocketManager();
     }
 
-    public sendRules(): void {
-        this.webSocketManager.queueMessage(WEBSOCKET_SENT_MESSAGE.RULE_TABLE_MSG,
-            createWebSocketMessage(WEBSOCKET_SENT_MESSAGE.RULE_TABLE_MSG, this.rules) );
+    /**
+     * Runs the rules against the code
+     * @param rules
+     * @returns Promise of the rules with updated results
+     */
+    public executeRules(rules: Rule[]): Promise<Rule[]> {
+        const rulePromises = rules.map((rule) => this.executeRule(rule));
+        return Promise.all(rulePromises);
+    }
+
+    /**
+     * Runs a rule against the code
+     * @param rule
+     * @returns Promise of the rule with updated results
+     */
+    public async executeRule(rule: Rule): Promise<Rule> {
+        if (!rule.filesAndFolders || !rule.rule) {
+            return Promise.resolve(rule);
+        }
+        // initializes the results, resets the property if exists
+        rule.results = [];
+
+        for (const fileFolder of rule.filesAndFolders) {
+            const source = await getSourceFromRelativePath(this.workspaceFolder, fileFolder);
+            const sgNodes = executeRuleOnSource(rule.rule, source, Lang.JavaScript);
+            const snippets = sgNodes.map((sgNode: SgNode) => {
+                return getSnippetFromSgNode(sgNode);
+            });
+            rule.results.push({ relativeFilePath: fileFolder, snippets: snippets } as ResultObject);
+        }
+        return Promise.resolve(rule);
+    }
+
+    /**
+     * Sends the rules to WebSocketManager
+     */
+    public sendRulesToWebSocketManager(): void {
+        try {
+            const message = createWebSocketMessage(WEBSOCKET_SENT_MESSAGE.RULE_TABLE_MSG, this.rules);
+            this.webSocketManager.queueMessage(WEBSOCKET_SENT_MESSAGE.RULE_TABLE_MSG, message );
+        } catch (error) {
+            console.error("RuleManager:", "Error in createWebSocketMessage()", error);
+        }
     }
 }
 

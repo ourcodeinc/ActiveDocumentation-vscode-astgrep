@@ -44,6 +44,7 @@ export class WebSocketManager {
                 const message = this.messageQueue[key];
                 if (message !== null) {
                     ws.send(message);
+                    console.log("WebSocketManager:", "sendQueuedMessagesToClient sent message", message);
                 }
             });
         }
@@ -58,6 +59,7 @@ export class WebSocketManager {
     private sendMessageToClient(ws: WebSocket, message: string): void {
         if (ws.readyState === WebSocket.OPEN) {
             ws.send(message);
+            console.log("WebSocketManager:", "sendMessageToClient sent message", message);
         }
     }
 

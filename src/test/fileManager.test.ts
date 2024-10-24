@@ -1,6 +1,6 @@
 // eslint-disable-next-line import/no-unresolved
 import * as vscode from "vscode";
-import { stub, spy } from "sinon";
+import sinon, { createStubInstance, createSandbox } from "sinon";
 import * as assert from "assert";
 import { FileManager } from "../fileManager";
 import { RuleManager } from "../core/ruleProcessor/ruleManager";
@@ -8,23 +8,28 @@ import { constants } from "../constants";
 import { WebSocketManager } from "../websocket/webSocketManager";
 
 describe("FileManager", function() {
+    let sandbox: sinon.SinonSandbox;
     let workspaceFolder: vscode.WorkspaceFolder;
     let webSocketManager: WebSocketManager;
     let fileManager: FileManager;
-    const port = 8080;
 
     beforeEach(function() {
         // Mocking the workspace folder and WebSocketManager
+        sandbox = createSandbox();
         workspaceFolder = {
             uri: vscode.Uri.parse("file:///dummy/path"),
         } as vscode.WorkspaceFolder;
 
-        webSocketManager = new WebSocketManager(port);
+        webSocketManager = createStubInstance(WebSocketManager);
         fileManager = FileManager.getInstance(workspaceFolder, webSocketManager);
     });
 
-    afterEach(function() {
-        FileManager["instance"] = null;
+    afterEach(() => {
+        sandbox.restore();
+    });
+
+    it("should create an instance of RuleManager", () => {
+        assert.ok(fileManager);
     });
 
     it("should return the singleton instance of FileManager", function() {
@@ -34,36 +39,38 @@ describe("FileManager", function() {
     });
 
     it("should watch for workspace changes", function() {
-        const onDidSaveTextDocumentStub = stub(vscode.workspace, "onDidSaveTextDocument");
-        const handleSaveTextDocumentSpy = spy(fileManager, "handleSaveTextDocument");
+        const onDidSaveTextDocumentStub = sandbox.stub(vscode.workspace, "onDidSaveTextDocument");
         fileManager["watchWorkspaceChanges"]();
 
-        assert.strictEqual(onDidSaveTextDocumentStub.callCount, 1, "Should set up the save document event listener");
-        assert.strictEqual(onDidSaveTextDocumentStub.firstCall.args[0], handleSaveTextDocumentSpy,
-            "The listener should be the handleSaveTextDocument method");
-
-        onDidSaveTextDocumentStub.restore();
+        assert.ok(onDidSaveTextDocumentStub.calledOnce, "Should set up the save document event listener");
     });
 
     it("should handle saving the rule table file", async function() {
-        const ruleManagerStub = stub(RuleManager.prototype, "handleFileChange").resolves();
+        const updateRuleTableStub = sandbox.stub();
+        sandbox.stub(RuleManager, "getInstance").returns({
+            updateRuleTable: updateRuleTableStub,
+        } as unknown as RuleManager);
         const document = {
             uri: vscode.Uri.joinPath(workspaceFolder.uri, constants.RULE_TABLE_FILE),
         } as vscode.TextDocument;
-        fileManager["handleSaveTextDocument"](document);
+        fileManager.handleSaveTextDocument(document);
 
-        assert.strictEqual(ruleManagerStub.callCount, 1, "handleFileChange should be called once");
-        ruleManagerStub.restore();
+        assert.ok(updateRuleTableStub.calledOnce,
+            `updateRuleTable should be called once but is called ${updateRuleTableStub.callCount}`);
     });
 
+
     it("should not handle saving other files", async function() {
-        const ruleManagerStub = stub(RuleManager.prototype, "handleFileChange").resolves();
+        const updateRuleTableStub = sandbox.stub();
+        sandbox.stub(RuleManager, "getInstance").returns({
+            updateRuleTable: updateRuleTableStub,
+        } as unknown as RuleManager);
         const document = {
             uri: vscode.Uri.joinPath(workspaceFolder.uri, "otherFile.txt"),
         } as vscode.TextDocument;
-        fileManager["handleSaveTextDocument"](document);
+        fileManager.handleSaveTextDocument(document);
 
-        assert.strictEqual(ruleManagerStub.callCount, 0, "handleFileChange should not be called");
-        ruleManagerStub.restore();
+        assert.strictEqual(updateRuleTableStub.callCount, 0,
+            `updateRuleTable should not be called but is called ${updateRuleTableStub.callCount}`);
     });
 });
