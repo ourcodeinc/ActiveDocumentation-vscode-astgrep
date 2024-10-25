@@ -1,10 +1,11 @@
 // eslint-disable-next-line import/no-unresolved
 import * as vscode from "vscode";
 import { constants } from "../../constants";
-import { ResultObject, Rule } from "../types";
+import { ResultObject, Rule, Snippet } from "./types";
 import { WebSocketManager } from "../../websocket/webSocketManager";
 import { WEBSOCKET_SENT_MESSAGE } from "../../websocket/webSocketConstants";
-import { createWebSocketMessage, getSourceFromRelativePath } from "../utilities";
+import { createWebSocketMessage } from "../../utilities";
+import { getSourceFromRelativePath, getFileOrDirectoryContent } from "../../vsCodeUtilities";
 import { executeRuleOnSource, getSnippetFromSgNode } from "../astGrep/ruleExecutor";
 import { Lang, SgNode } from "@ast-grep/napi";
 
@@ -83,16 +84,23 @@ class RuleManager {
         if (!rule.filesAndFolders || !rule.rule) {
             return Promise.resolve(rule);
         }
-        // initializes the results, resets the property if exists
         rule.results = [];
 
         for (const fileFolder of rule.filesAndFolders) {
-            const source = await getSourceFromRelativePath(this.workspaceFolder, fileFolder);
-            const sgNodes = executeRuleOnSource(rule.rule, source, Lang.JavaScript);
-            const snippets = sgNodes.map((sgNode: SgNode) => {
-                return getSnippetFromSgNode(sgNode);
+            const pathsAndSources = await getFileOrDirectoryContent(this.workspaceFolder, fileFolder);
+            const results : ResultObject[] = [];
+            pathsAndSources.forEach((pathAndSource) => {
+                let snippets: Snippet[] = [];
+                const source = pathAndSource.source;
+                if (source !== "") {
+                    const sgNodes = executeRuleOnSource(rule.rule, source, Lang.JavaScript);
+                    snippets = sgNodes.map((sgNode: SgNode) => {
+                        return getSnippetFromSgNode(sgNode);
+                    });
+                }
+                results.push({ relativeFilePath: pathAndSource.relativePath, snippets: snippets } as ResultObject);
             });
-            rule.results.push({ relativeFilePath: fileFolder, snippets: snippets } as ResultObject);
+            rule.results.push(results);
         }
         return Promise.resolve(rule);
     }

@@ -2,11 +2,11 @@
 import * as vscode from "vscode";
 import { WebSocketManager } from "../../../websocket/webSocketManager";
 import { RuleManager } from "../../../core/ruleProcessor/ruleManager";
-import * as utilities from "../../../core/utilities";
+import * as vsCodeUtilities from "../../../vsCodeUtilities";
 import * as ruleExecutor from "../../../core/astGrep/ruleExecutor";
 import assert from "assert";
 import sinon, { createSandbox, createStubInstance } from "sinon";
-import { Rule } from "../../../core/types";
+import { Rule } from "../../../core/ruleProcessor/types";
 import { Lang, NapiConfig, SgNode } from "@ast-grep/napi";
 
 describe("RuleManager", () => {
@@ -52,7 +52,7 @@ describe("RuleManager", () => {
                 },
             ];
             const fileContent = JSON.stringify(mockRules);
-            sandbox.stub(utilities, "getSourceFromRelativePath").resolves(fileContent);
+            sandbox.stub(vsCodeUtilities, "getSourceFromRelativePath").resolves(fileContent);
 
             const rules = await ruleManager.readRuleTable();
 
@@ -62,7 +62,7 @@ describe("RuleManager", () => {
 
         it("should show an error message and return an empty array when an error occurs", async () => {
             const errorMessage = "File not found";
-            sandbox.stub(utilities, "getSourceFromRelativePath").rejects(new Error(errorMessage));
+            sandbox.stub(vsCodeUtilities, "getSourceFromRelativePath").rejects(new Error(errorMessage));
 
             const showErrorMessageStub = sandbox.stub(vscode.window, "showErrorMessage");
             const rules = await ruleManager.readRuleTable();
@@ -107,7 +107,6 @@ describe("RuleManager", () => {
 
     describe("executeRule", () => {
         it("should execute a rule and populate the results correctly", async () => {
-            // Arrange
             const rule = {
                 index: "1",
                 title: "Test Rule",
@@ -118,7 +117,7 @@ describe("RuleManager", () => {
                 results: [],
             } as Rule;
 
-            const mockSourceCode = "const a = 1;";
+            const mockSourceCode = [{ relativePath: "testFile.js", source: "const a = 1;" }];
             const mockSgNode = {
                 text: () => "const a = 1;",
                 range: () => ({
@@ -134,21 +133,22 @@ describe("RuleManager", () => {
                 offsets: { start: 0, end: 12 },
             };
 
-            const getSourceStub = sandbox.stub(utilities, "getSourceFromRelativePath").resolves(mockSourceCode);
+            const getSourceStub = sandbox.stub(vsCodeUtilities, "getFileOrDirectoryContent").resolves(mockSourceCode);
             const executeRuleStub = sandbox.stub(ruleExecutor, "executeRuleOnSource").returns([mockSgNode]);
             const getSnippetStub = sandbox.stub(ruleExecutor, "getSnippetFromSgNode").returns(mockSnippet);
             const resultRule = await ruleManager.executeRule(rule);
 
             assert.ok(getSourceStub.calledOnceWithExactly(ruleManager.workspaceFolder, "testFile.js"),
                 "getSourceFromRelativePath should be called once with the correct arguments");
-            assert.ok(executeRuleStub.calledOnceWithExactly(rule.rule, mockSourceCode, Lang.JavaScript),
-                "executeRuleOnSource should be called once with the correct arguments");
+            assert.ok(executeRuleStub.calledOnceWithExactly(rule.rule, mockSourceCode[0].source, Lang.JavaScript),
+                "getFileOrDirectoryContent should be called once with the correct arguments");
             assert.ok(getSnippetStub.calledOnceWithExactly(mockSgNode),
                 "getSnippetFromSgNode should be called once with the correct arguments");
 
             assert.strictEqual(resultRule.results?.length, 1, "The results array should have one entry");
-            assert.strictEqual(resultRule.results[0].relativeFilePath, "testFile.js", "The relative file path should be correct");
-            assert.deepEqual(resultRule.results[0].snippets, [mockSnippet], "The snippets should be populated correctly");
+            assert.strictEqual(resultRule.results[0].length, 1, "The results[0] array should have one entry");
+            assert.strictEqual(resultRule.results[0][0].relativeFilePath, "testFile.js", "The relative file path should be correct");
+            assert.deepEqual(resultRule.results[0][0].snippets, [mockSnippet], "The snippets should be populated correctly");
         });
 
         it("should handle an empty source string gracefully", async () => {
@@ -162,17 +162,19 @@ describe("RuleManager", () => {
                 results: [],
             } as Rule;
 
-            const emptySourceCode = "";
-            const getSourceStub = sandbox.stub(utilities, "getSourceFromRelativePath").resolves(emptySourceCode);
+            const emptySourceCode = [{ relativePath: "emptyFile.js", source: "" }];
+            const getSourceStub = sandbox.stub(vsCodeUtilities, "getFileOrDirectoryContent").resolves(emptySourceCode);
             const executeRuleStub = sandbox.stub(ruleExecutor, "executeRuleOnSource").returns([]);
             const resultRule = await ruleManager.executeRule(rule);
 
-            assert.ok(getSourceStub.calledOnceWithExactly(ruleManager.workspaceFolder, "emptyFile.js"), "getSourceFromRelativePath should be called once with the correct arguments");
-            assert.ok(executeRuleStub.calledOnceWithExactly(rule.rule, emptySourceCode, Lang.JavaScript), "executeRuleOnSource should be called once with the correct arguments");
+            assert.ok(getSourceStub.calledOnceWithExactly(ruleManager.workspaceFolder, "emptyFile.js"),
+                "getFileOrDirectoryContent should be called once with the correct arguments");
+            assert.ok(executeRuleStub.notCalled, "executeRuleOnSource should not be called");
 
             // Check if the results array is empty
             assert.strictEqual(resultRule.results?.length, 1, "The results array should have one entry");
-            assert.strictEqual(resultRule.results[0].snippets.length, 0, "The snippets array should be empty");
+            assert.strictEqual(resultRule.results[0].length, 1, "The results[0] array should have one entry");
+            assert.strictEqual(resultRule.results[0][0].snippets.length, 0, "The snippets array should be empty");
         });
     });
 });

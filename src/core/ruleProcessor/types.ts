@@ -7,7 +7,7 @@ export interface Rule {
     tags: string[],
     rule: NapiConfig,
     filesAndFolders?: string[],
-    results?: ResultObject[]
+    results?: ResultObject[][]
 }
 
 export interface ResultObject {

@@ -1,5 +1,5 @@
 import { parse, Lang, SgNode, NapiConfig } from "@ast-grep/napi";
-import { Snippet } from "../types";
+import { Snippet } from "../ruleProcessor/types";
 
 /**
  * Runs the rule on a given sourcecode.
