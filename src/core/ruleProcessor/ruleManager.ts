@@ -1,13 +1,14 @@
 // eslint-disable-next-line import/no-unresolved
 import * as vscode from "vscode";
 import { constants } from "../../constants";
-import { ResultObject, Rule, Snippet } from "./types";
+import { isValidRule, ResultObject, Rule, Snippet } from "./types";
 import { WebSocketManager } from "../../websocket/webSocketManager";
 import { WEBSOCKET_SENT_MESSAGE } from "../../websocket/webSocketConstants";
 import { createWebSocketMessage } from "../../utilities";
 import { getSourceFromRelativePath, getFileOrDirectoryContent } from "../../vsCodeUtilities";
 import { executeRuleOnSource, getSnippetFromSgNode } from "../astGrep/ruleExecutor";
-import { Lang, SgNode } from "@ast-grep/napi";
+import { SgNode } from "@ast-grep/napi";
+import { getLangFromString } from "../astGrep/astGrepUtilities";
 
 /**
  * Singleton class to manage rules from ruleTable.json.
@@ -48,7 +49,12 @@ class RuleManager {
     public async readRuleTable(): Promise<Rule[]> {
         try {
             const fileContent = await getSourceFromRelativePath(this.workspaceFolder, constants.RULE_TABLE_FILE);
-            return JSON.parse(fileContent); // todo: do checking here...
+            const parsedObjs = JSON.parse(fileContent);
+            if (!Array.isArray(parsedObjs)) {
+                vscode.window.showErrorMessage(`Error ${constants.RULE_TABLE_FILE} is not an array.`);
+                return Promise.resolve([]);
+            }
+            return Promise.resolve(parsedObjs.filter((parsedObj: object) => isValidRule(parsedObj)));
         } catch (error) {
             vscode.window.showErrorMessage(`Error reading ${constants.RULE_TABLE_FILE}: ${error}`);
             return Promise.resolve([]);
@@ -81,7 +87,7 @@ class RuleManager {
      * @returns Promise of the rule with updated results
      */
     public async executeRule(rule: Rule): Promise<Rule> {
-        if (!rule.filesAndFolders || !rule.rule) {
+        if (!rule.filesAndFolders || !rule.rulePattern) {
             return Promise.resolve(rule);
         }
         rule.results = [];
@@ -92,11 +98,16 @@ class RuleManager {
             pathsAndSources.forEach((pathAndSource) => {
                 let snippets: Snippet[] = [];
                 const source = pathAndSource.source;
+                const language = getLangFromString(rule.language);
                 if (source !== "") {
-                    const sgNodes = executeRuleOnSource(rule.rule, source, Lang.JavaScript);
-                    snippets = sgNodes.map((sgNode: SgNode) => {
-                        return getSnippetFromSgNode(sgNode);
-                    });
+                    if (language !== undefined) {
+                        const sgNodes = executeRuleOnSource(rule.rulePattern, source, language!);
+                        snippets = sgNodes.map((sgNode: SgNode) => {
+                            return getSnippetFromSgNode(sgNode);
+                        });
+                    } else {
+                        console.log("RuleManager:", "The language of the rule is not supported.");
+                    }
                 }
                 results.push({ relativeFilePath: pathAndSource.relativePath, snippets: snippets } as ResultObject);
             });

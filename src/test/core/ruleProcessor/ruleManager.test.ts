@@ -4,9 +4,11 @@ import { WebSocketManager } from "../../../websocket/webSocketManager";
 import { RuleManager } from "../../../core/ruleProcessor/ruleManager";
 import * as vsCodeUtilities from "../../../vsCodeUtilities";
 import * as ruleExecutor from "../../../core/astGrep/ruleExecutor";
+import * as astGrepUtilities from "../../../core/astGrep/astGrepUtilities";
 import assert from "assert";
 import sinon, { createSandbox, createStubInstance } from "sinon";
 import { Rule } from "../../../core/ruleProcessor/types";
+import * as types from "../../../core/ruleProcessor/types";
 import { Lang, NapiConfig, SgNode } from "@ast-grep/napi";
 
 describe("RuleManager", () => {
@@ -48,21 +50,36 @@ describe("RuleManager", () => {
                     title: "Test Rule",
                     description: "A test rule",
                     tags: [],
-                    rule: {} as NapiConfig,
+                    rulePattern: {} as NapiConfig,
+                    language: "",
                 },
             ];
             const fileContent = JSON.stringify(mockRules);
             sandbox.stub(vsCodeUtilities, "getSourceFromRelativePath").resolves(fileContent);
+            sandbox.stub(types, "isValidRule").resolves(true);
 
             const rules = await ruleManager.readRuleTable();
 
             assert.strictEqual(rules.length, 1, "Should return one rule");
-            assert.strictEqual(rules[0].title, "Test Rule", "The title of the rule should be 'Test Rule'");
+            assert.strictEqual(rules[0].title, "Test Rule",
+                `The title of the rule should be 'Test Rule' but is ${rules[0].title}`);
         });
 
         it("should show an error message and return an empty array when an error occurs", async () => {
             const errorMessage = "File not found";
             sandbox.stub(vsCodeUtilities, "getSourceFromRelativePath").rejects(new Error(errorMessage));
+
+            const showErrorMessageStub = sandbox.stub(vscode.window, "showErrorMessage");
+            const rules = await ruleManager.readRuleTable();
+
+            assert.strictEqual(rules.length, 0, "Should return an empty array");
+            assert.ok(showErrorMessageStub.calledOnce, "showErrorMessage should be called once");
+        });
+
+        it("should show an error message and return an empty array when the input is not an array", async () => {
+            sandbox.stub(vsCodeUtilities, "getSourceFromRelativePath").resolves("{}");
+            sandbox.stub(JSON, "parse").returns({});
+            sandbox.stub(Array, "isArray").returns(false);
 
             const showErrorMessageStub = sandbox.stub(vscode.window, "showErrorMessage");
             const rules = await ruleManager.readRuleTable();
@@ -80,7 +97,8 @@ describe("RuleManager", () => {
                     title: "Test Rule",
                     description: "A test rule",
                     tags: [],
-                    rule: {} as NapiConfig,
+                    rulePattern: {} as NapiConfig,
+                    language: "",
                 },
             ];
             const executedRules : Rule[] = [
@@ -88,7 +106,8 @@ describe("RuleManager", () => {
                     title: "Executed Rule",
                     description: "Executed test rule",
                     tags: [],
-                    rule: {} as NapiConfig,
+                    rulePattern: {} as NapiConfig,
+                    language: "",
                 },
             ];
 
@@ -112,7 +131,8 @@ describe("RuleManager", () => {
                 title: "Test Rule",
                 description: "A test rule",
                 tags: [],
-                rule: {} as NapiConfig,
+                rulePattern: {} as NapiConfig,
+                language: "",
                 filesAndFolders: ["testFile.js"],
                 results: [],
             } as Rule;
@@ -136,11 +156,12 @@ describe("RuleManager", () => {
             const getSourceStub = sandbox.stub(vsCodeUtilities, "getFileOrDirectoryContent").resolves(mockSourceCode);
             const executeRuleStub = sandbox.stub(ruleExecutor, "executeRuleOnSource").returns([mockSgNode]);
             const getSnippetStub = sandbox.stub(ruleExecutor, "getSnippetFromSgNode").returns(mockSnippet);
+            sandbox.stub(astGrepUtilities, "getLangFromString").returns(Lang.JavaScript);
             const resultRule = await ruleManager.executeRule(rule);
 
             assert.ok(getSourceStub.calledOnceWithExactly(ruleManager.workspaceFolder, "testFile.js"),
                 "getSourceFromRelativePath should be called once with the correct arguments");
-            assert.ok(executeRuleStub.calledOnceWithExactly(rule.rule, mockSourceCode[0].source, Lang.JavaScript),
+            assert.ok(executeRuleStub.calledOnceWithExactly(rule.rulePattern, mockSourceCode[0].source, Lang.JavaScript),
                 "getFileOrDirectoryContent should be called once with the correct arguments");
             assert.ok(getSnippetStub.calledOnceWithExactly(mockSgNode),
                 "getSnippetFromSgNode should be called once with the correct arguments");
@@ -157,7 +178,8 @@ describe("RuleManager", () => {
                 title: "Test Rule with Empty Source",
                 description: "A test rule with an empty source",
                 tags: [],
-                rule: {} as NapiConfig,
+                rulePattern: {} as NapiConfig,
+                language: "",
                 filesAndFolders: ["emptyFile.js"],
                 results: [],
             } as Rule;
@@ -165,6 +187,34 @@ describe("RuleManager", () => {
             const emptySourceCode = [{ relativePath: "emptyFile.js", source: "" }];
             const getSourceStub = sandbox.stub(vsCodeUtilities, "getFileOrDirectoryContent").resolves(emptySourceCode);
             const executeRuleStub = sandbox.stub(ruleExecutor, "executeRuleOnSource").returns([]);
+            const resultRule = await ruleManager.executeRule(rule);
+
+            assert.ok(getSourceStub.calledOnceWithExactly(ruleManager.workspaceFolder, "emptyFile.js"),
+                "getFileOrDirectoryContent should be called once with the correct arguments");
+            assert.ok(executeRuleStub.notCalled, "executeRuleOnSource should not be called");
+
+            // Check if the results array is empty
+            assert.strictEqual(resultRule.results?.length, 1, "The results array should have one entry");
+            assert.strictEqual(resultRule.results[0].length, 1, "The results[0] array should have one entry");
+            assert.strictEqual(resultRule.results[0][0].snippets.length, 0, "The snippets array should be empty");
+        });
+
+        it("should handle unsupported language gracefully", async () => {
+            const rule = {
+                index: "3",
+                title: "Test Rule with Empty Source",
+                description: "A test rule with an empty source",
+                tags: [],
+                rulePattern: {} as NapiConfig,
+                language: "",
+                filesAndFolders: ["emptyFile.js"],
+                results: [],
+            } as Rule;
+
+            const emptySourceCode = [{ relativePath: "emptyFile.js", source: "" }];
+            const getSourceStub = sandbox.stub(vsCodeUtilities, "getFileOrDirectoryContent").resolves(emptySourceCode);
+            const executeRuleStub = sandbox.stub(ruleExecutor, "executeRuleOnSource").returns([]);
+            sandbox.stub(astGrepUtilities, "getLangFromString").returns(undefined);
             const resultRule = await ruleManager.executeRule(rule);
 
             assert.ok(getSourceStub.calledOnceWithExactly(ruleManager.workspaceFolder, "emptyFile.js"),
