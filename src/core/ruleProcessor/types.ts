@@ -7,7 +7,7 @@ export interface Rule {
     tags: string[],
     rulePattern: NapiConfig, // an object with a `rule` property
     language: string,
-    filesAndFolders?: string[],
+    filesAndFolders: string[],
     results?: ResultObject[][]
 }
 
@@ -43,9 +43,8 @@ export const isValidRule = (obj: unknown): obj is Rule => {
         typeof ruleObj.rulePattern === "object" && // Assuming NapiConfig is an object
         ruleObj.rulePattern !== null &&
         typeof ruleObj.language === "string" &&
-        (ruleObj.filesAndFolders === undefined ||
-         (Array.isArray(ruleObj.filesAndFolders) &&
-          ruleObj.filesAndFolders.every((folder) => typeof folder === "string"))) &&
+        (Array.isArray(ruleObj.filesAndFolders) &&
+          ruleObj.filesAndFolders.every((folder) => typeof folder === "string")) &&
         (ruleObj.results === undefined ||
          (Array.isArray(ruleObj.results) &&
           ruleObj.results.every((resultArray) =>

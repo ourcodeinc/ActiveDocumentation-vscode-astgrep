@@ -6,6 +6,7 @@ import { FileManager } from "../fileManager";
 import { RuleManager } from "../core/ruleProcessor/ruleManager";
 import { constants } from "../constants";
 import { WebSocketManager } from "../websocket/webSocketManager";
+import * as vsCodeUtilities from "../vsCodeUtilities";
 
 describe("FileManager", function() {
     let sandbox: sinon.SinonSandbox;
@@ -45,32 +46,39 @@ describe("FileManager", function() {
         assert.ok(onDidSaveTextDocumentStub.calledOnce, "Should set up the save document event listener");
     });
 
-    it("should handle saving the rule table file", async function() {
-        const updateRuleTableStub = sandbox.stub();
-        sandbox.stub(RuleManager, "getInstance").returns({
-            updateRuleTable: updateRuleTableStub,
-        } as unknown as RuleManager);
-        const document = {
-            uri: vscode.Uri.joinPath(workspaceFolder.uri, constants.RULE_TABLE_FILE),
-        } as vscode.TextDocument;
-        fileManager.handleSaveTextDocument(document);
+    describe("handleSaveTextDocument", () => {
+        it("should handle saving the rule table file", async function() {
+            const updateRuleTableStub = sandbox.stub();
+            sandbox.stub(RuleManager, "getInstance").returns({
+                updateRuleTable: updateRuleTableStub,
+            } as unknown as RuleManager);
+            const document = {
+                uri: vscode.Uri.joinPath(workspaceFolder.uri, constants.RULE_TABLE_FILE),
+            } as vscode.TextDocument;
+            fileManager.handleSaveTextDocument(document);
 
-        assert.ok(updateRuleTableStub.calledOnce,
-            `updateRuleTable should be called once but is called ${updateRuleTableStub.callCount}`);
-    });
+            assert.ok(updateRuleTableStub.calledOnce,
+                `updateRuleTable should be called once but is called ${updateRuleTableStub.callCount}`);
+        });
 
 
-    it("should not handle saving other files", async function() {
-        const updateRuleTableStub = sandbox.stub();
-        sandbox.stub(RuleManager, "getInstance").returns({
-            updateRuleTable: updateRuleTableStub,
-        } as unknown as RuleManager);
-        const document = {
-            uri: vscode.Uri.joinPath(workspaceFolder.uri, "otherFile.txt"),
-        } as vscode.TextDocument;
-        fileManager.handleSaveTextDocument(document);
+        it("should handle saving other files properly", async function() {
+            const updateRuleTableStub = sandbox.stub();
+            const updateRuleResultStub = sandbox.stub();
+            sandbox.stub(RuleManager, "getInstance").returns({
+                updateRuleTable: updateRuleTableStub,
+                updateRuleResultsOnFileChange: updateRuleResultStub,
+            } as unknown as RuleManager);
+            const document = {
+                uri: vscode.Uri.joinPath(workspaceFolder.uri, "otherFile.txt"),
+            } as vscode.TextDocument;
+            sandbox.stub(vsCodeUtilities, "getRelativePath").returns("otherFile.txt");
+            fileManager.handleSaveTextDocument(document);
 
-        assert.strictEqual(updateRuleTableStub.callCount, 0,
-            `updateRuleTable should not be called but is called ${updateRuleTableStub.callCount}`);
+            assert.strictEqual(updateRuleTableStub.callCount, 0,
+                `updateRuleTable should not be called but is called ${updateRuleTableStub.callCount}`);
+            assert.strictEqual(updateRuleResultStub.callCount, 1,
+                `updateRuleResultStub should be called once but is called ${updateRuleResultStub.callCount}`);
+        });
     });
 });

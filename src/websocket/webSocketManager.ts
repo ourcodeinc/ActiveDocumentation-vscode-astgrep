@@ -16,7 +16,7 @@ export class WebSocketManager {
     }
 
     /**
-   * Handle new client connections
+   * Handles new client connections
    * @param ws
    */
     private onConnection(ws: WebSocket): void {
@@ -38,6 +38,10 @@ export class WebSocketManager {
         });
     }
 
+    /**
+     * Sends queues messages to a newly connected client
+     * @param ws
+     */
     public sendQueuedMessagesToClient(ws: WebSocket): void {
         if (ws.readyState === WebSocket.OPEN) {
             Object.keys(this.messageQueue).forEach((key: string) => {
@@ -50,13 +54,12 @@ export class WebSocketManager {
         }
     }
 
-    private sendMessagesToAllClients(): void {
-        this.clients.forEach((client) => {
-            this.sendQueuedMessagesToClient(client);
-        });
-    }
-
-    private sendMessageToClient(ws: WebSocket, message: string): void {
+    /**
+     * @param ws
+     * @param message
+     * @ignore for tests
+     */
+    public sendMessageToClient(ws: WebSocket, message: string): void {
         if (ws.readyState === WebSocket.OPEN) {
             ws.send(message);
             console.log("WebSocketManager:", "sendMessageToClient sent message", message);
@@ -64,7 +67,7 @@ export class WebSocketManager {
     }
 
     /**
-     * Send a message to all clients
+     * Sends a message to all clients
      * @param message
      */
     public broadcast(message: string): void {
@@ -74,28 +77,27 @@ export class WebSocketManager {
     }
 
     /**
-   * add a message to the queue and send it if clients are connected
+   * Updates a message in the messageQueue
    * @param {string} message
    */
-    public queueMessage(key: string, message: string): void {
+    public updateMessageQueue(key: string, message: string): void {
         this.messageQueue[key] = message;
-        this.sendMessagesToAllClients();
     }
 
     /**
-   * Method to close the WebSocket server and all client connections
+   * Closes the WebSocket server and all client connections
    */
     public close(): void {
         console.log("WebSocket.ts:", "Closing WebSocket server...");
 
-        // Close all connected clients
+        // Closes all connected clients
         this.clients.forEach((client) => {
             if (client.readyState === WebSocket.OPEN) {
                 client.close();
             }
         });
 
-        // Close the WebSocket server
+        // Closes the WebSocket server
         this.server.close((err) => {
             if (err) {
                 console.error("WebSocket.ts:", "Error closing the WebSocket server:", err);

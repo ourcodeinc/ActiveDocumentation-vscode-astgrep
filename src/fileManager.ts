@@ -3,6 +3,7 @@ import * as vscode from "vscode";
 import { constants } from "./constants";
 import { RuleManager } from "./core/ruleProcessor/ruleManager";
 import { WebSocketManager } from "./websocket/webSocketManager";
+import { getRelativePath } from "./vsCodeUtilities";
 
 /**
  * Singleton class to manage file change events within a workspace.
@@ -48,10 +49,14 @@ export class FileManager {
    * @param document - The event containing information about the text document change.
    */
     public handleSaveTextDocument(document: vscode.TextDocument) {
-        const fileUri = vscode.Uri.joinPath(this.workspaceFolder.uri, constants.RULE_TABLE_FILE);
-        if (document.uri.toString() === fileUri.toString()) {
-            const ruleManager = RuleManager.getInstance(this.workspaceFolder, this.webSocketManager);
+        const fileUri = document.uri;
+        const ruleTableUri = vscode.Uri.joinPath(this.workspaceFolder.uri, constants.RULE_TABLE_FILE);
+        const ruleManager = RuleManager.getInstance(this.workspaceFolder, this.webSocketManager);
+        if (fileUri.toString() === ruleTableUri.toString()) {
             ruleManager.updateRuleTable();
+        } else {
+            const relativeFilePath = getRelativePath(this.workspaceFolder, fileUri);
+            ruleManager.updateRuleResultsOnFileChange(relativeFilePath);
         }
     }
 }

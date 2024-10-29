@@ -26,7 +26,7 @@ class RuleManager {
     private constructor(workspaceFolder: vscode.WorkspaceFolder, webSocketManager: WebSocketManager) {
         this.workspaceFolder = workspaceFolder;
         this.webSocketManager = webSocketManager;
-        this.updateRuleTable();
+        this.getInitialRuleTable();
     }
 
     /**
@@ -44,7 +44,6 @@ class RuleManager {
 
     /**
    * Reads rules from the RULE_TABLE_JSON file.
-   * @ignore Testing this function is not necessary.
    */
     public async readRuleTable(): Promise<Rule[]> {
         try {
@@ -62,13 +61,23 @@ class RuleManager {
     }
 
     /**
-     * Reads and updates the rules and sends the new rules to WebSocket
+     * Reads the initial rules from file and gets the results
+     */
+    public async getInitialRuleTable(): Promise<void> {
+        const rules = await this.readRuleTable();
+        const executedRules = await this.executeRules(rules);
+        this.rules = executedRules;
+        this.sendRulesToWebSocketManager(WEBSOCKET_SENT_MESSAGE.RULE_TABLE_MSG);
+    }
+
+    /**
+     * Reads the updated rules and gets the results
      */
     public async updateRuleTable(): Promise<void> {
         const rules = await this.readRuleTable();
         const executedRules = await this.executeRules(rules);
         this.rules = executedRules;
-        this.sendRulesToWebSocketManager();
+        this.sendRulesToWebSocketManager(WEBSOCKET_SENT_MESSAGE.UPDATED_RULE_TABLE_MSG);
     }
 
     /**
@@ -88,41 +97,66 @@ class RuleManager {
      */
     public async executeRule(rule: Rule): Promise<Rule> {
         if (!rule.filesAndFolders || !rule.rulePattern) {
+            console.log("RuleManager:", "The rule is not complete to be executed.", rule);
             return Promise.resolve(rule);
         }
         rule.results = [];
-
         for (const fileFolder of rule.filesAndFolders) {
-            const pathsAndSources = await getFileOrDirectoryContent(this.workspaceFolder, fileFolder);
-            const results : ResultObject[] = [];
-            pathsAndSources.forEach((pathAndSource) => {
-                let snippets: Snippet[] = [];
-                const source = pathAndSource.source;
-                const language = getLangFromString(rule.language);
-                if (source !== "") {
-                    if (language !== undefined) {
-                        const sgNodes = executeRuleOnSource(rule.rulePattern, source, language!);
-                        snippets = sgNodes.map((sgNode: SgNode) => {
-                            return getSnippetFromSgNode(sgNode);
-                        });
-                    } else {
-                        console.log("RuleManager:", "The language of the rule is not supported.");
-                    }
-                }
-                results.push({ relativeFilePath: pathAndSource.relativePath, snippets: snippets } as ResultObject);
-            });
+            const results : ResultObject[] = await this.executeRuleOnFileFolder(rule, fileFolder);
             rule.results.push(results);
         }
         return Promise.resolve(rule);
     }
 
     /**
+     * Runs a rule against the given file or files in the given folder
+     * @param rule
+     * @param fileFolder an entry in Rule.FilesAndFolders
+     * @returns an array where each entry contains the results of a file
+     */
+    public async executeRuleOnFileFolder(rule: Rule, fileFolder: string): Promise<ResultObject[]> {
+        const pathsAndSources = await getFileOrDirectoryContent(this.workspaceFolder, fileFolder);
+        const results : ResultObject[] = [];
+        pathsAndSources.forEach((pathAndSource) => {
+            let snippets: Snippet[] = [];
+            const source = pathAndSource.source;
+            const language = getLangFromString(rule.language);
+            if (source !== "") {
+                if (language !== undefined) {
+                    const sgNodes = executeRuleOnSource(rule.rulePattern, source, language!);
+                    snippets = sgNodes.map((sgNode: SgNode) => {
+                        return getSnippetFromSgNode(sgNode);
+                    });
+                } else {
+                    console.log("RuleManager:", "The language of the rule is not supported.");
+                }
+            }
+            results.push({ relativeFilePath: pathAndSource.relativePath, snippets: snippets } as ResultObject);
+        });
+        return Promise.resolve(results);
+    }
+
+
+    public async updateRuleResultsOnFileChange(relativeFilePath: string): Promise<void> {
+        for (let rule of this.rules) {
+            const shouldUpdateRule = rule.filesAndFolders
+                .some((fileFolder) => fileFolder === relativeFilePath || fileFolder.startsWith(relativeFilePath));
+            if (shouldUpdateRule) {
+                rule = await this.executeRule(rule);
+            }
+        }
+        this.sendRulesToWebSocketManager(WEBSOCKET_SENT_MESSAGE.UPDATED_CODE_MSG);
+    }
+
+    /**
      * Sends the rules to WebSocketManager
      */
-    public sendRulesToWebSocketManager(): void {
+    public sendRulesToWebSocketManager(webSocketMessage: string): void {
         try {
-            const message = createWebSocketMessage(WEBSOCKET_SENT_MESSAGE.RULE_TABLE_MSG, this.rules);
-            this.webSocketManager.queueMessage(WEBSOCKET_SENT_MESSAGE.RULE_TABLE_MSG, message );
+            const queueMessage = createWebSocketMessage(WEBSOCKET_SENT_MESSAGE.RULE_TABLE_MSG, this.rules);
+            this.webSocketManager.updateMessageQueue(WEBSOCKET_SENT_MESSAGE.RULE_TABLE_MSG, queueMessage);
+            const message = createWebSocketMessage(webSocketMessage, this.rules);
+            this.webSocketManager.broadcast(message);
         } catch (error) {
             console.error("RuleManager:", "Error in createWebSocketMessage()", error);
         }

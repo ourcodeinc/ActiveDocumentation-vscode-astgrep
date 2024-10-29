@@ -2,19 +2,22 @@
 import * as WebSocket from "ws";
 import { WebSocketManager } from "../../websocket/webSocketManager";
 import assert from "assert";
-import { stub, spy } from "sinon";
+import sinon, { stub, spy, createSandbox } from "sinon";
 
 describe("WebSocketManager", function() {
+    let sandbox: sinon.SinonSandbox;
     let webSocketManager: WebSocketManager;
     let server: WebSocket.Server;
     const port = 8081;
 
     beforeEach(function() {
+        sandbox = createSandbox();
         webSocketManager = new WebSocketManager(port);
         server = webSocketManager.server;
     });
 
     afterEach(function() {
+        sandbox.restore();
         webSocketManager.close();
     });
 
@@ -33,27 +36,126 @@ describe("WebSocketManager", function() {
     });
 
     it("should send queued messages to the client on connection", function(done) {
-        const message = "Test message";
-        const key = "key";
-        webSocketManager.queueMessage(key, message);
-        const sendStub = stub(WebSocket.WebSocket.prototype, "send");
         const mockClient = new WebSocket.WebSocket(`ws://localhost:${port}`);
+        const sendQueuedMessagesToClientStub = sandbox.stub(webSocketManager, "sendQueuedMessagesToClient");
 
         mockClient.on("open", () => {
             setTimeout(() => {
-                assert.strictEqual(sendStub.callCount, 1, `send() is called ${sendStub.callCount} times`);
-                assert.strictEqual(sendStub.firstCall.args[0], message, `Expected message to be "${message}"`);
+                assert.strictEqual(sendQueuedMessagesToClientStub.callCount, 1,
+                    `sendQueuedMessagesToClientStub() is called ${sendQueuedMessagesToClientStub.callCount} times`);
 
                 mockClient.close();
-                sendStub.restore();
                 done();
             }, 100);
         });
 
         mockClient.on("error", (error: Error) => {
             console.error("WebSocket error:", error);
-            sendStub.restore();
             done(error);
+        });
+    });
+
+    describe("sendQueuedMessagesToClient", function() {
+        it("should send all queued messages to the client if connected", function(done) {
+            const mockClient = new WebSocket.WebSocket(`ws://localhost:${port}`);
+            const messageQueue = {
+                message1: "Hello, Client!",
+                message2: "Welcome!",
+            };
+            webSocketManager.messageQueue = messageQueue;
+            mockClient.on("open", () => {
+                const sendSpy = sandbox.spy(mockClient, "send");
+                webSocketManager.sendQueuedMessagesToClient(mockClient as unknown as WebSocket);
+                setTimeout(() => {
+                    assert.strictEqual(sendSpy.callCount, 2, `Expected 2 messages to be sent, but ${sendSpy.callCount} were sent`);
+                    assert(sendSpy.calledWith("Hello, Client!"), "Expected message 'Hello, Client!' to be sent");
+                    assert(sendSpy.calledWith("Welcome!"), "Expected message 'Welcome!' to be sent");
+
+                    sendSpy.restore();
+                    mockClient.close();
+                    done();
+                }, 100);
+            });
+        });
+
+        it("should not send any messages if messageQueue is empty", function(done) {
+            const mockClient = new WebSocket.WebSocket(`ws://localhost:${port}`);
+            webSocketManager.messageQueue = {};
+            mockClient.on("open", () => {
+                const sendSpy = sandbox.spy(mockClient, "send");
+                webSocketManager.sendQueuedMessagesToClient(mockClient as unknown as WebSocket);
+                setTimeout(() => {
+                    assert.strictEqual(sendSpy.callCount, 0, `Expected no messages to be sent, but ${sendSpy.callCount} were sent`);
+                    sendSpy.restore();
+                    mockClient.close();
+                    done();
+                }, 100);
+            });
+        });
+
+        it("should not send messages if the WebSocket is not open", function(done) {
+            const mockClient = new WebSocket.WebSocket(`ws://localhost:${port}`);
+            webSocketManager.messageQueue = { message1: "Hello, Client!" };
+            mockClient.on("open", () => {
+                const sendSpy = sandbox.spy(mockClient, "send");
+                mockClient.close();
+                webSocketManager.sendQueuedMessagesToClient(mockClient as unknown as WebSocket);
+
+                setTimeout(() => {
+                    assert.strictEqual(sendSpy.callCount, 0, `Expected no messages to be sent since WebSocket is closed, but ${sendSpy.callCount} were sent`);
+
+                    sendSpy.restore();
+                    done();
+                }, 100);
+            });
+        });
+    });
+
+    it("should broadcast a message to all connected clients", function(done) {
+        const mockClient1 = new WebSocket.WebSocket(`ws://localhost:${port}`);
+        const mockClient2 = new WebSocket.WebSocket(`ws://localhost:${port}`);
+
+        const sendMessageToClientStub = sandbox.stub(webSocketManager, "sendMessageToClient");
+        Promise.all([
+            new Promise<void>((resolve) => mockClient1.on("open", resolve)),
+            new Promise<void>((resolve) => mockClient2.on("open", resolve)),
+        ]).then(() => {
+            const message = "Hello, clients!";
+            webSocketManager.broadcast(message);
+
+            assert.strictEqual(sendMessageToClientStub.callCount, 2,
+                `Expected sendMessageToClient to be called twice, but it was called ${sendMessageToClientStub.callCount} times`);
+
+            sendMessageToClientStub.getCalls().forEach((call) => {
+                assert.strictEqual(call.args[1], message, `Expected message to be "${message}", but got "${call.args[1]}"`);
+            });
+
+            mockClient1.close();
+            mockClient2.close();
+            done();
+        }).catch(done);
+    });
+
+    describe("updateMessageQueue", function() {
+        it("should update the message queue with a new message", function() {
+            const key = "messageKey";
+            const message = "New queued message";
+            webSocketManager.updateMessageQueue(key, message);
+            assert.strictEqual(webSocketManager.messageQueue[key], message,
+                `Expected messageQueue[${key}] to be "${message}", but got "${webSocketManager.messageQueue[key]}"`);
+        });
+
+        it("should replace an existing message in the message queue", function() {
+            const key = "messageKey";
+            const initialMessage = "Initial message";
+            const updatedMessage = "Updated message";
+
+            webSocketManager.updateMessageQueue(key, initialMessage);
+            assert.strictEqual(webSocketManager.messageQueue[key], initialMessage,
+                `Expected messageQueue[${key}] to be "${initialMessage}", but got "${webSocketManager.messageQueue[key]}"`);
+            webSocketManager.updateMessageQueue(key, updatedMessage);
+            assert.strictEqual(webSocketManager.messageQueue[key], updatedMessage,
+                `Expected messageQueue[${key}] to be "${updatedMessage}", but got "${webSocketManager.messageQueue[key]}"`);
         });
     });
 
@@ -67,47 +169,6 @@ describe("WebSocketManager", function() {
         mockClient.on("close", () => {
             assert.strictEqual(webSocketManager.clients.size, 0, `There are ${webSocketManager.clients.size} clients`);
             done();
-        });
-    });
-
-    it("should queue a message and send it to all clients", function(done) {
-        const message = "Another test message";
-        const key = "Another key";
-        const sendStub = stub(WebSocket.WebSocket.prototype, "send");
-
-        const mockClient1 = new WebSocket.WebSocket(`ws://localhost:${port}`);
-        const mockClient2 = new WebSocket.WebSocket(`ws://localhost:${port}`);
-
-        mockClient1.on("open", () => {
-            mockClient2.on("open", () => {
-                webSocketManager.queueMessage(key, message);
-
-                setTimeout(() => {
-                    assert.strictEqual(sendStub.callCount, 2,
-                        `send() should be called twice, once for each client, but was called ${sendStub.callCount} times`);
-                    assert.strictEqual(sendStub.getCall(0).args[0], message,
-                        `Expected message for client 1 to be "${message}", but was "${sendStub.getCall(0).args[0]}"`);
-                    assert.strictEqual(sendStub.getCall(1).args[0], message,
-                        `Expected message for client 2 to be "${message}", but was "${sendStub.getCall(1).args[0]}"`);
-
-                    mockClient1.close();
-                    mockClient2.close();
-                    sendStub.restore();
-                    done();
-                }, 100);
-            });
-        });
-
-        mockClient1.on("error", (error) => {
-            console.error("WebSocket error on client 1:", error);
-            sendStub.restore();
-            done(error);
-        });
-
-        mockClient2.on("error", (error) => {
-            console.error("WebSocket error on client 2:", error);
-            sendStub.restore();
-            done(error);
         });
     });
 
