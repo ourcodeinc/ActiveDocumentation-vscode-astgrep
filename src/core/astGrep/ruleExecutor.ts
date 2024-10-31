@@ -1,5 +1,6 @@
 import { parse, Lang, SgNode, NapiConfig } from "@ast-grep/napi";
 import { Snippet } from "../ruleProcessor/types";
+import { areNodesEqual } from "./astGrepUtilities";
 
 /**
  * Runs the rule on a given sourcecode.
@@ -52,3 +53,53 @@ export const getSnippetFromSgNode = (sgNode: SgNode) : Snippet => {
         offsets: { start: sgNode.range().start.index, end: sgNode.range().end.index },
     } as Snippet;
 };
+
+/**
+ * Returns Satisfied and Violated arrays based on Quantifier and Constraints arrays of SgNode.
+ * @param quantifierNodes - The main array of SgNode objects
+ * @param constraintNodes - The array of SgNode objects to be checked against Quantifier
+ * @returns { { Satisfied: SgNode[], Violated: SgNode[] } } The Satisfied and Violated arrays
+ */
+export const getSatisfiedAndViolatedNodes = (quantifierNodes: SgNode[], constraintNodes: SgNode[]):
+    { satisfiedNodes: SgNode[]; violatedNodes: SgNode[] } => {
+    const satisfiedNodes: SgNode[] = [];
+    const violatedNodes: SgNode[] = [];
+    for (const quantifierNode of quantifierNodes) {
+        const isSatisfied = constraintNodes.some((constraintNode) => areNodesEqual(quantifierNode, constraintNode));
+        if (isSatisfied) {
+            satisfiedNodes.push(quantifierNode);
+        } else {
+            violatedNodes.push(quantifierNode);
+        }
+    }
+    // Check if all Constraints are satisfied
+    if (satisfiedNodes.length !== constraintNodes.length) {
+        console.info("ruleExecutor.getSatisfiedAndViolatedNodes:",
+            "Not all the Constraint nodes are included in the Quantifier nodes. Check the rules.");
+    }
+    return { satisfiedNodes, violatedNodes };
+};
+
+/**
+ * Runs the quantifier and constraint rules on a source and returns the satisfied and violated snippets
+ * @param quantifierRule
+ * @param constraintRule
+ * @param source
+ * @param lang
+ * @returns The snippets for satisfied nodes and violated nodes.
+ */
+export const getSatifiedAndViolatedResults =
+    (quantifierRule: NapiConfig, constraintRule: NapiConfig, source: string, lang: Lang):
+    { satisfiedSnippets: Snippet[], violatedSnippets: Snippet[] } => {
+        const quantifierNodes = executeRuleOnSource(quantifierRule, source, lang);
+        const constraintNodes = executeRuleOnSource(constraintRule, source, lang);
+
+        const sgNodesObject = getSatisfiedAndViolatedNodes(quantifierNodes, constraintNodes);
+        const satisfiedSnippets = sgNodesObject.satisfiedNodes.map((sgNode: SgNode) => {
+            return getSnippetFromSgNode(sgNode);
+        });
+        const violatedSnippets = sgNodesObject.violatedNodes.map((sgNode: SgNode) => {
+            return getSnippetFromSgNode(sgNode);
+        });
+        return { satisfiedSnippets, violatedSnippets };
+    };

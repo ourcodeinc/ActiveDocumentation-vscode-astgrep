@@ -9,7 +9,7 @@ import assert from "assert";
 import sinon, { createSandbox, createStubInstance } from "sinon";
 import { Rule } from "../../../core/ruleProcessor/types";
 import * as types from "../../../core/ruleProcessor/types";
-import { Lang, NapiConfig, SgNode } from "@ast-grep/napi";
+import { Lang, NapiConfig } from "@ast-grep/napi";
 
 describe("RuleManager", () => {
     let sandbox: sinon.SinonSandbox;
@@ -51,7 +51,8 @@ describe("RuleManager", () => {
                     title: "Test Rule",
                     description: "A test rule",
                     tags: [],
-                    rulePattern: {} as NapiConfig,
+                    rulePatternQuantifier: {} as NapiConfig,
+                    rulePatternConstraint: {} as NapiConfig,
                     language: "",
                     filesAndFolders: [],
                 },
@@ -100,7 +101,8 @@ describe("RuleManager", () => {
                     title: "Test Rule",
                     description: "A test rule",
                     tags: [],
-                    rulePattern: {} as NapiConfig,
+                    rulePatternQuantifier: {} as NapiConfig,
+                    rulePatternConstraint: {} as NapiConfig,
                     language: "",
                     filesAndFolders: [],
                 },
@@ -111,7 +113,8 @@ describe("RuleManager", () => {
                     title: "Executed Rule",
                     description: "Executed test rule",
                     tags: [],
-                    rulePattern: {} as NapiConfig,
+                    rulePatternQuantifier: {} as NapiConfig,
+                    rulePatternConstraint: {} as NapiConfig,
                     language: "",
                     filesAndFolders: [],
                 },
@@ -139,7 +142,8 @@ describe("RuleManager", () => {
                     title: "Test Rule",
                     description: "A test rule",
                     tags: [],
-                    rulePattern: {} as NapiConfig,
+                    rulePatternQuantifier: {} as NapiConfig,
+                    rulePatternConstraint: {} as NapiConfig,
                     language: "",
                     filesAndFolders: [],
                 },
@@ -150,7 +154,8 @@ describe("RuleManager", () => {
                     title: "Executed Rule",
                     description: "Executed test rule",
                     tags: [],
-                    rulePattern: {} as NapiConfig,
+                    rulePatternQuantifier: {} as NapiConfig,
+                    rulePatternConstraint: {} as NapiConfig,
                     language: "",
                     filesAndFolders: [],
                 },
@@ -179,44 +184,40 @@ describe("RuleManager", () => {
                 title: "Test Rule",
                 description: "A test rule",
                 tags: [],
-                rulePattern: {} as NapiConfig,
+                rulePatternQuantifier: {} as NapiConfig,
+                rulePatternConstraint: {} as NapiConfig,
                 language: "",
                 filesAndFolders: ["testFile.js"],
                 results: [],
             } as Rule;
 
             const mockSourceCode = [{ relativePath: "testFile.js", source: "const a = 1;" }];
-            const mockSgNode = {
-                text: () => "const a = 1;",
-                range: () => ({
-                    start: { line: 1, column: 0, index: 0 },
-                    end: { line: 1, column: 12, index: 12 },
-                }),
-            } as SgNode;
-
             const mockSnippet = {
                 snippet: "const a = 1;",
                 lines: { start: 1, end: 1 },
                 columns: { start: 0, end: 12 },
                 offsets: { start: 0, end: 12 },
             };
+            const mockResults = {
+                satisfiedSnippets: [mockSnippet],
+                violatedSnippets: [mockSnippet],
+            };
 
             const getSourceStub = sandbox.stub(vsCodeUtilities, "getFileOrDirectoryContent").resolves(mockSourceCode);
             sandbox.stub(astGrepUtilities, "getLangFromString").returns(Lang.JavaScript);
-            const executeRuleStub = sandbox.stub(ruleExecutor, "executeRuleOnSource").returns([mockSgNode]);
-            const getSnippetStub = sandbox.stub(ruleExecutor, "getSnippetFromSgNode").returns(mockSnippet);
+            const getResultsStub = sandbox.stub(ruleExecutor, "getSatifiedAndViolatedResults").returns(mockResults);
+
             const resultObject = await ruleManager.executeRuleOnFileFolder(rule, "testFile.js");
 
             assert.ok(getSourceStub.calledOnceWithExactly(ruleManager.workspaceFolder, "testFile.js"),
                 "getSourceFromRelativePath should be called once with the correct arguments");
-            assert.ok(executeRuleStub.calledOnceWithExactly(rule.rulePattern, mockSourceCode[0].source, Lang.JavaScript),
-                "getFileOrDirectoryContent should be called once with the correct arguments");
-            assert.ok(getSnippetStub.calledOnceWithExactly(mockSgNode),
-                "getSnippetFromSgNode should be called once with the correct arguments");
+            assert.ok(getResultsStub.calledOnceWithExactly(
+                rule.rulePatternQuantifier, rule.rulePatternConstraint, mockSourceCode[0].source, Lang.JavaScript),
+            "getSatifiedAndViolatedResults should be called once with the correct arguments");
 
             assert.strictEqual(resultObject.length, 1, "The resultObject array should have one entry");
             assert.strictEqual(resultObject[0].relativeFilePath, "testFile.js", "The relative file path should be correct");
-            assert.deepEqual(resultObject[0].snippets, [mockSnippet], "The snippets should be populated correctly");
+            assert.deepEqual(resultObject[0].snippets, mockResults, "The snippets should be populated correctly");
         });
 
         it("should handle an empty source string gracefully", async () => {
@@ -225,25 +226,34 @@ describe("RuleManager", () => {
                 title: "Test Rule with Empty Source",
                 description: "A test rule with an empty source",
                 tags: [],
-                rulePattern: {} as NapiConfig,
+                rulePatternQuantifier: {} as NapiConfig,
+                rulePatternConstraint: {} as NapiConfig,
                 language: "",
                 filesAndFolders: ["emptyFile.js"],
                 results: [],
             } as Rule;
-
+            const mockResults = {
+                satisfiedSnippets: [],
+                violatedSnippets: [],
+            };
             const emptySourceCode = [{ relativePath: "emptyFile.js", source: "" }];
+
             const getSourceStub = sandbox.stub(vsCodeUtilities, "getFileOrDirectoryContent").resolves(emptySourceCode);
             sandbox.stub(astGrepUtilities, "getLangFromString").returns(Lang.JavaScript);
-            const executeRuleStub = sandbox.stub(ruleExecutor, "executeRuleOnSource").returns([]);
+            const getResultsStub = sandbox.stub(ruleExecutor, "getSatifiedAndViolatedResults").returns(mockResults);
+
             const resultObject = await ruleManager.executeRuleOnFileFolder(rule, "emptyFile.js");
 
             assert.ok(getSourceStub.calledOnceWithExactly(ruleManager.workspaceFolder, "emptyFile.js"),
                 "getFileOrDirectoryContent should be called once with the correct arguments");
-            assert.ok(executeRuleStub.notCalled, "executeRuleOnSource should not be called");
+            assert.ok(getResultsStub.notCalled, "executeRuleOnSource should not be called");
 
             // Check if the results array is empty
             assert.strictEqual(resultObject.length, 1, "The resultObject array should have one entry");
-            assert.strictEqual(resultObject[0].snippets.length, 0, "The snippets array should be empty");
+            assert.strictEqual(resultObject[0].snippets.satisfiedSnippets.length, 0,
+                "The satisfied snippets array should be empty");
+            assert.strictEqual(resultObject[0].snippets.violatedSnippets.length, 0,
+                "The violated snippets array should be empty");
         });
 
         it("should handle unsupported language gracefully", async () => {
@@ -252,7 +262,8 @@ describe("RuleManager", () => {
                 title: "Test Rule with Empty Source",
                 description: "A test rule with an empty source",
                 tags: [],
-                rulePattern: {} as NapiConfig,
+                rulePatternQuantifier: {} as NapiConfig,
+                rulePatternConstraint: {} as NapiConfig,
                 language: "",
                 filesAndFolders: ["emptyFile.js"],
                 results: [],
@@ -270,7 +281,10 @@ describe("RuleManager", () => {
 
             // Check if the results array is empty
             assert.strictEqual(resultObject.length, 1, "The resultObject array should have one entry");
-            assert.strictEqual(resultObject[0].snippets.length, 0, "The snippets array should be empty");
+            assert.strictEqual(resultObject[0].snippets.satisfiedSnippets.length, 0,
+                "The satisfied snippets array should be empty");
+            assert.strictEqual(resultObject[0].snippets.violatedSnippets.length, 0,
+                "The violated snippets array should be empty");
         });
     });
 });

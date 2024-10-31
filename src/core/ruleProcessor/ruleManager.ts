@@ -6,8 +6,7 @@ import { WebSocketManager } from "../../websocket/webSocketManager";
 import { WEBSOCKET_SENT_MESSAGE } from "../../websocket/webSocketConstants";
 import { createWebSocketMessage } from "../../utilities";
 import { getSourceFromRelativePath, getFileOrDirectoryContent } from "../../vsCodeUtilities";
-import { executeRuleOnSource, getSnippetFromSgNode } from "../astGrep/ruleExecutor";
-import { SgNode } from "@ast-grep/napi";
+import { getSatifiedAndViolatedResults } from "../astGrep/ruleExecutor";
 import { getLangFromString } from "../astGrep/astGrepUtilities";
 
 /**
@@ -96,7 +95,7 @@ class RuleManager {
      * @returns Promise of the rule with updated results
      */
     public async executeRule(rule: Rule): Promise<Rule> {
-        if (!rule.filesAndFolders || !rule.rulePattern) {
+        if (!rule.filesAndFolders || !rule.rulePatternQuantifier || !rule.rulePatternConstraint) {
             console.log("RuleManager:", "The rule is not complete to be executed.", rule);
             return Promise.resolve(rule);
         }
@@ -118,15 +117,12 @@ class RuleManager {
         const pathsAndSources = await getFileOrDirectoryContent(this.workspaceFolder, fileFolder);
         const results : ResultObject[] = [];
         pathsAndSources.forEach((pathAndSource) => {
-            let snippets: Snippet[] = [];
+            let snippets: { satisfiedSnippets: Snippet[], violatedSnippets: Snippet[] } = { satisfiedSnippets: [], violatedSnippets: [] };
             const source = pathAndSource.source;
             const language = getLangFromString(rule.language);
             if (source !== "") {
                 if (language !== undefined) {
-                    const sgNodes = executeRuleOnSource(rule.rulePattern, source, language!);
-                    snippets = sgNodes.map((sgNode: SgNode) => {
-                        return getSnippetFromSgNode(sgNode);
-                    });
+                    snippets = getSatifiedAndViolatedResults(rule.rulePatternQuantifier, rule.rulePatternConstraint, source, language!);
                 } else {
                     console.log("RuleManager:", "The language of the rule is not supported.");
                 }

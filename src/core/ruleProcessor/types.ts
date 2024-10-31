@@ -5,7 +5,8 @@ export interface Rule {
     title: string,
     description: string,
     tags: string[],
-    rulePattern: NapiConfig, // an object with a `rule` property
+    rulePatternQuantifier: NapiConfig, // an object with a `rule` property
+    rulePatternConstraint: NapiConfig, // an object with a `rule` property
     language: string,
     filesAndFolders: string[],
     results?: ResultObject[][]
@@ -13,7 +14,7 @@ export interface Rule {
 
 export interface ResultObject {
     relativeFilePath: string,
-    snippets: Snippet[]
+    snippets: { satisfiedSnippets: Snippet[], violatedSnippets: Snippet[] },
 }
 
 export interface Snippet {
@@ -23,55 +24,59 @@ export interface Snippet {
     offsets: { start: number, end: number }
 }
 
+
+function isObject(value: unknown): value is Record<string, unknown> {
+    return typeof value === "object" && value !== null;
+}
+
+function isStringArray(arr: unknown): arr is string[] {
+    return Array.isArray(arr) && arr.every((item) => typeof item === "string");
+}
+
+function isResultObjectArray(arr: unknown): arr is ResultObject[][] {
+    return Array.isArray(arr) && arr.every((row) =>
+        Array.isArray(row) && row.every(isResultObject),
+    );
+}
+
+function isSnippet(value: unknown): value is Snippet {
+    return isObject(value) &&
+           typeof value.snippet === "string" &&
+           isObject(value.lines) &&
+           typeof value.lines.start === "number" &&
+           typeof value.lines.end === "number" &&
+           isObject(value.columns) &&
+           typeof value.columns.start === "number" &&
+           typeof value.columns.end === "number" &&
+           isObject(value.offsets) &&
+           typeof value.offsets.start === "number" &&
+           typeof value.offsets.end === "number";
+}
+
+function isResultObject(value: unknown): value is ResultObject {
+    return isObject(value) &&
+           typeof value.relativeFilePath === "string" &&
+           isObject(value.snippets) &&
+           Array.isArray(value.snippets.satisfiedSnippets) &&
+           value.snippets.satisfiedSnippets.every(isSnippet) &&
+           Array.isArray(value.snippets.violatedSnippets) &&
+           value.snippets.violatedSnippets.every(isSnippet);
+}
+
 /**
- * Checking if a given object is a valid Rule
+ * Checks if an object is of type Rule
  * @param obj
- * @returns
+ * @returns boolean
  */
 export const isValidRule = (obj: unknown): obj is Rule => {
-    if (typeof obj !== "object" || obj === null) return false;
-
-    // Type assertion for object
-    const ruleObj = obj as Record<string, unknown>;
-
-    return (
-        typeof ruleObj.index === "string" &&
-        typeof ruleObj.title === "string" &&
-        typeof ruleObj.description === "string" &&
-        Array.isArray(ruleObj.tags) &&
-        ruleObj.tags.every((tag) => typeof tag === "string") &&
-        typeof ruleObj.rulePattern === "object" && // Assuming NapiConfig is an object
-        ruleObj.rulePattern !== null &&
-        typeof ruleObj.language === "string" &&
-        (Array.isArray(ruleObj.filesAndFolders) &&
-          ruleObj.filesAndFolders.every((folder) => typeof folder === "string")) &&
-        (ruleObj.results === undefined ||
-         (Array.isArray(ruleObj.results) &&
-          ruleObj.results.every((resultArray) =>
-              Array.isArray(resultArray) &&
-              resultArray.every((result) =>
-                  typeof result.relativeFilePath === "string" &&
-                  Array.isArray(result.snippets) &&
-                  result.snippets.every((snippet: unknown) => {
-                      const snippetCheck = snippet as Snippet;
-                      return (
-                          typeof snippetCheck.snippet === "string" &&
-                        typeof snippetCheck.lines === "object" &&
-                        snippetCheck.lines !== null &&
-                        typeof snippetCheck.lines.start === "number" &&
-                        typeof snippetCheck.lines.end === "number" &&
-                        typeof snippetCheck.columns === "object" &&
-                        snippetCheck.columns !== null &&
-                        typeof snippetCheck.columns.start === "number" &&
-                        typeof snippetCheck.columns.end === "number" &&
-                        typeof snippetCheck.offsets === "object" &&
-                        snippetCheck.offsets !== null &&
-                        typeof snippetCheck.offsets.start === "number" &&
-                        typeof snippetCheck.offsets.end === "number"
-                      );
-                  }),
-              ),
-          ))
-        )
-    );
+    return isObject(obj) &&
+           typeof obj.index === "string" &&
+           typeof obj.title === "string" &&
+           typeof obj.description === "string" &&
+           isStringArray(obj.tags) &&
+           isObject(obj.rulePatternQuantifier) && // assuming NapiConfig has been validated elsewhere
+           isObject(obj.rulePatternConstraint) && // assuming NapiConfig has been validated elsewhere
+           typeof obj.language === "string" &&
+           isStringArray(obj.filesAndFolders) &&
+           (obj.results === undefined || isResultObjectArray(obj.results));
 };
